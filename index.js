@@ -14,34 +14,37 @@ app.use(compression({
         return compression.filter(req, res);
     }
 }));
-app.set('view engine', 'ejs');
-app.set('trust proxy', 1);
 app.use(function (req, res, next) {
     res.header('Access-Control-Allow-Origin', '*');
     res.header(
         'Access-Control-Allow-Headers',
         'Origin, X-Requested-With, Content-Type, Accept',
     );
-    console.log(`[${new Date().toLocaleString()}] ${req.method} ${req.url} - ${res.statusCode}`);
     next();
 });
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.json());
 app.use(rateLimiter({ windowMs: 15 * 60 * 1000, max: 100, headers: true }));
+app.use(function (req, res, next) {
+    console.log(req.method, req.url);
+    next();
+});
+app.use(express.json());
 
-app.all('/player/login/dashboard', function (req, res) {
+app.post('/player/login/dashboard', (req, res) => {
     const tData = {};
+    let encData = "";
     try {
         const uData = JSON.stringify(req.body).split('"')[1].split('\\n'); const uName = uData[0].split('|'); const uPass = uData[1].split('|');
         for (let i = 0; i < uData.length - 1; i++) { const d = uData[i].split('|'); tData[d[0]] = d[1]; }
-        if (uName[1] && uPass[1]) { res.redirect('/player/growid/login/validate'); }
+        encData = Buffer.from(JSON.stringify(tData)).toString('base64');
+        if (uName[1] && uPass[1]) { res.status(302).redirect(`/player/growid/login/validate?token=${encData}`); }
     } catch (why) { console.log(`Warning: ${why}`); }
 
-    res.render(__dirname + '/public/html/dashboard.ejs', { data: tData });
+    res.status(302).redirect(`/player/growid/login/validate?token=${encData}`);
 });
 
 app.all('/player/growid/login/validate', (req, res) => {
-    const _token = req.body._token;
+    const _token = req.query.token;
     const growId = req.body.growId;
     const password = req.body.password;
 
@@ -52,10 +55,6 @@ app.all('/player/growid/login/validate', (req, res) => {
     res.send(
         `{"status":"success","message":"Account Validated.","token":"${token}","url":"","accountType":"growtopia"}`,
     );
-});
-
-app.all('/player/*', function (req, res) {
-    res.status(301).redirect('https://api.yoruakio.tech/player/' + req.path.slice(8));
 });
 
 app.get('/', function (req, res) {
